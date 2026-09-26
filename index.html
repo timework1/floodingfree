@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FloodingFree - ระบบตัดสินเส้นทางน้ำท่วม</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #map { height: 350px; border-radius: 1rem; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-8 font-sans">
+
+    <div class="max-w-xl mx-auto space-y-6">
+        
+        <!-- Header -->
+        <div class="text-center space-y-2">
+            <h1 class="text-3xl font-extrabold text-amber-400 tracking-tight">🛡️ FloodingFree</h1>
+            <p class="text-xs text-slate-400">เดินทางมั่นใจ AI วิเคราะห์และตัดสินใจเส้นทางแทนคุณ</p>
+        </div>
+
+        <!-- Input Form -->
+        <div class="bg-slate-800 p-5 rounded-2xl shadow-xl space-y-4 border border-slate-700">
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">📍 จุดเริ่มต้น</label>
+                <input id="start" type="text" value="รังสิต ปทุมธานี" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-amber-400">
+            </div>
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">🏁 จุดหมายปลายทาง</label>
+                <input id="destination" type="text" value="นิคมอุตสาหกรรมบางปะอิน" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-amber-400">
+            </div>
+            <button onclick="analyzeRoute()" class="w-full bg-amber-500 hover:bg-amber-600 font-bold py-3 rounded-xl transition text-slate-950 shadow-lg">
+                ⚡ วิเคราะห์และตัดสินใจเส้นทาง
+            </button>
+        </div>
+
+        <!-- Decision Status Display -->
+        <div id="decision-box" class="hidden rounded-2xl p-6 text-center space-y-3 transition-all duration-300">
+            <div id="status-badge" class="inline-block px-4 py-1.5 rounded-full text-xs font-bold tracking-wide"></div>
+            <h2 id="status-title" class="text-2xl font-extrabold"></h2>
+            <p id="status-desc" class="text-sm leading-relaxed opacity-90 max-w-md mx-auto"></p>
+            <div id="action-btn-container" class="pt-2"></div>
+        </div>
+
+        <!-- Map Section -->
+        <div class="bg-slate-800 p-2 rounded-2xl border border-slate-700">
+            <div id="map"></div>
+        </div>
+
+        <!-- Support / Donation Button -->
+        <div class="text-center pt-2">
+            <button onclick="toggleDonationModal()" class="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-400/30 font-medium px-5 py-2.5 rounded-full text-sm transition shadow-lg">
+                <span>❤️</span> สนับสนุนค่าบริการระบบ FloodingFree
+            </button>
+        </div>
+
+    </div>
+
+    <!-- Donation Modal -->
+    <div id="donation-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-sm w-full p-6 text-center space-y-4 relative shadow-2xl">
+            <button onclick="toggleDonationModal()" class="absolute top-3 right-4 text-slate-400 hover:text-white text-xl">✕</button>
+            
+            <h3 class="text-lg font-bold text-amber-400">☕ ร่วมสนับสนุนโครงการ</h3>
+            <p class="text-xs text-slate-300 leading-relaxed">
+                เงินบริจาคจะนำไปใช้เป็นค่าดูแลรักษาระบบ ให้ผู้ประสบภัยและผู้เดินทางได้ใช้งานฟรีต่อไปค่ะ
+            </p>
+
+            <div class="bg-white p-3 rounded-xl inline-block shadow-inner">
+                <!-- สามารถเปลี่ยนลิงก์ QR หรือใส่รูป PromtPay ของพี่ฟีโน่ได้ตรงนี้ -->
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=0812345678" alt="PromptPay QR Code" class="w-48 h-48 mx-auto">
+            </div>
+
+            <div class="bg-slate-900/60 p-3 rounded-xl text-left text-xs space-y-1.5 border border-slate-700/50">
+                <div class="flex justify-between text-slate-400">
+                    <span>ช่องทาง:</span>
+                    <span class="text-amber-400 font-bold">PromptPay / พร้อมเพย์</span>
+                </div>
+                <div class="flex justify-between text-slate-400">
+                    <span>ชื่อระบบ:</span>
+                    <span class="text-white font-medium">FloodingFree Project</span>
+                </div>
+            </div>
+
+            <button onclick="toggleDonationModal()" class="w-full bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold py-2.5 rounded-xl transition">
+                ปิดหน้าต่าง
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let map = L.map('map').setView([14.05, 100.6], 11);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        function analyzeRoute() {
+            const dest = document.getElementById('destination').value;
+            const box = document.getElementById('decision-box');
+            const badge = document.getElementById('status-badge');
+            const title = document.getElementById('status-title');
+            const desc = document.getElementById('status-desc');
+            const btnContainer = document.getElementById('action-btn-container');
+
+            box.classList.remove('hidden');
+
+            if (dest.includes("บางปะอิน") || dest.includes("เชียงใหม่")) {
+                box.className = "bg-red-950/80 border-2 border-red-500 text-red-100 rounded-2xl p-6 text-center space-y-3";
+                badge.className = "bg-red-500 text-white px-4 py-1.5 rounded-full text-xs font-bold";
+                badge.innerText = "🛑 คำตัดสิน: ห้ามเดินทางเด็ดขาด";
+                title.innerText = "เส้นทางนี้ตัดขาดแล้ว";
+                desc.innerText = "มีนาตรวจสอบแล้ว มีน้ำท่วมขังสูงเกิน 50 ซม. บริเวณถนนสายหลัก รถทุกชนิดผ่านไม่ได้ การเดินทางช่วงนี้เสี่ยงติดค้างกลางทาง ให้เลื่อนการเดินทางทันทีค่ะ!";
+                btnContainer.innerHTML = `<a href="https://www.google.com/maps" target="_blank" class="inline-block bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2 rounded-lg">ดูเส้นทางเลี่ยงใน Google Maps</a>`;
+            } else if (dest.includes("ชลบุรี") || dest.includes("ระยอง")) {
+                box.className = "bg-amber-950/80 border-2 border-amber-500 text-amber-100 rounded-2xl p-6 text-center space-y-3";
+                badge.className = "bg-amber-500 text-slate-950 px-4 py-1.5 rounded-full text-xs font-bold";
+                badge.innerText = "⚠️ คำตัดสิน: เดินทางได้ แต่ต้องระมัดระวัง";
+                title.innerText = "มีน้ำขังบางช่วง เลนขวาผ่านได้";
+                desc.innerText = "มีน้ำท่วมขังชิดซ้ายความสูง 10-15 ซม. รถเล็กวิ่งได้แต่ต้องใช้ความเร็วต่ำ ชะลอตัวช่วง กม.24 แนะนำให้ใช้เลนขวาตลอดเส้นทางค่ะ";
+                btnContainer.innerHTML = `<a href="https://www.google.com/maps" target="_blank" class="inline-block bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold px-4 py-2 rounded-lg">เปิดนำทาง Google Maps</a>`;
+            } else {
+                box.className = "bg-emerald-950/80 border-2 border-emerald-500 text-emerald-100 rounded-2xl p-6 text-center space-y-3";
+                badge.className = "bg-emerald-500 text-slate-950 px-4 py-1.5 rounded-full text-xs font-bold";
+                badge.innerText = "🟢 คำตัดสิน: ผ่านฉลุย เดินทางได้เลย";
+                title.innerText = "เส้นทางสะดวก ปลอดภัย 100%";
+                desc.innerText = "ตลอดเส้นทางไม่มีรายงานน้ำท่วมขังหรืออุปสรรค จราจรคล่องตัว เดินทางได้ตามปกติอย่างสบายใจเลยค่ะ!";
+                btnContainer.innerHTML = `<a href="https://www.google.com/maps" target="_blank" class="inline-block bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-bold px-4 py-2 rounded-lg">เริ่มนำทาง Google Maps</a>`;
+            }
+        }
+
+        function toggleDonationModal() {
+            const modal = document.getElementById('donation-modal');
+            modal.classList.toggle('hidden');
+        }
+    </script>
+</body>
+</html>
